@@ -18,11 +18,12 @@ class DashboardController extends Controller
         $baseQuery = Order::where('status', 'completed')
             ->where('created_at', '>=', $today);
 
-        $totalRevenue = (clone $baseQuery)->sum('total_amount');
-        $totalTax = (clone $baseQuery)->sum('tax_amount');
-        $totalServiceCharge = (clone $baseQuery)->sum('service_charge_amount');
+        $summary = (clone $baseQuery)->selectRaw('SUM(total_amount) as revenue, SUM(tax_amount) as tax, SUM(service_charge_amount) as service_charge, COUNT(*) as transactions')->first();
+        $totalRevenue = (float) $summary->revenue;
+        $totalTax = (float) $summary->tax;
+        $totalServiceCharge = (float) $summary->service_charge;
         $netRevenue = $totalRevenue - $totalTax - $totalServiceCharge;
-        $totalTransactions = (clone $baseQuery)->count();
+        $totalTransactions = (int) $summary->transactions;
 
         $activeCashiers = User::where('role', 'cashier')->where('is_active', true)->count();
 
@@ -44,12 +45,18 @@ class DashboardController extends Controller
             ->limit(7)
             ->get();
 
-        $salesData = collect(range(6, 0))->map(function ($daysAgo) {
-            $date = now()->subDays($daysAgo)->startOfDay();
-            $dayOrders = Order::where('status', 'completed')->whereDate('created_at', $date);
-            $dayTotal = (float) $dayOrders->sum('total_amount');
-            $dayTax = (float) $dayOrders->sum('tax_amount');
-            $daySc = (float) $dayOrders->sum('service_charge_amount');
+        $dailySales = Order::where('status', 'completed')
+            ->where('created_at', '>=', $today->copy()->subDays(6))
+            ->where('created_at', '<', $today->copy()->addDay())
+            ->selectRaw('DATE(created_at) as date, SUM(total_amount) as revenue, SUM(tax_amount) as tax, SUM(service_charge_amount) as service_charge')
+            ->groupByRaw('DATE(created_at)')->get()->keyBy('date');
+
+        $salesData = collect(range(6, 0))->map(function ($daysAgo) use ($today, $dailySales) {
+            $date = $today->copy()->subDays($daysAgo);
+            $day = $dailySales->get($date->toDateString());
+            $dayTotal = (float) ($day?->revenue ?? 0);
+            $dayTax = (float) ($day?->tax ?? 0);
+            $daySc = (float) ($day?->service_charge ?? 0);
             return [
                 'date' => $date->format('d/m'),
                 'full_date' => $date->toDateString(),

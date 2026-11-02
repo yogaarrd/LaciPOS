@@ -21,7 +21,7 @@ class POSController extends Controller
                 'price' => $p->price,
                 'cogs' => $p->cogs,
                 'stock' => $p->stock,
-                'photo_url' => $p->photo_url,
+                'photo_url' => $p->photo_path ? route('app.img', ['path' => $p->photo_path, 'thumbnail' => 1]) : null,
                 'category_id' => $p->category_id,
                 'is_discount_active' => $p->is_discount_active,
                 'discount_type' => $p->discount ? $p->discount->discount_type : null,

@@ -141,5 +141,12 @@ Route::get('/img/{path}', function (string $path) {
         abort(404);
     }
 
+    if (request()->boolean('thumbnail') && str_starts_with($safePath, 'products/')) {
+        $filePath = app(\App\Services\ProductThumbnail::class)->path($filePath);
+        $response = response()->file($filePath)->setAutoEtag()->setAutoLastModified()->setPublic()->setMaxAge(86400);
+        $response->isNotModified(request());
+        return $response;
+    }
+
     return response()->file($filePath);
 })->where('path', '.*')->name('app.img');

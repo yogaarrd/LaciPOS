@@ -22,6 +22,17 @@ const cartDiscountType = ref<string | null>(null);
 const cartDiscountValue = ref<number | null>(null);
 const cartDiscountNote = ref<string | null>(null);
 
+const quantitiesByProduct = computed(() => {
+    const quantities = new Map<string, { total: number; discounted: number }>();
+    for (const item of items.value) {
+        const quantity = quantities.get(item.productId) ?? { total: 0, discounted: 0 };
+        quantity.total += item.quantity;
+        if (item.discountType && item.discountValue) quantity.discounted += item.quantity;
+        quantities.set(item.productId, quantity);
+    }
+    return quantities;
+});
+
 export function useCart() {
     const page = usePage();
     const storeSettings = computed(() => page.props.storeSettings as any);
@@ -178,13 +189,11 @@ export function useCart() {
     const isEmpty = computed<boolean>(() => items.value.length === 0);
 
     const getQuantityByProductId = (productId: string): number => {
-        return items.value.filter(i => i.productId === productId).reduce((sum, item) => sum + item.quantity, 0);
+        return quantitiesByProduct.value.get(productId)?.total ?? 0;
     };
 
     const getDiscountedQuantityByProductId = (productId: string): number => {
-        return items.value
-            .filter(i => i.productId === productId && !!(i.discountType && i.discountValue))
-            .reduce((sum, item) => sum + item.quantity, 0);
+        return quantitiesByProduct.value.get(productId)?.discounted ?? 0;
     };
 
     return {

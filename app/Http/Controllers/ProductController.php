@@ -13,7 +13,7 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::with('category')
+        $query = Product::with(['category', 'discount'])
             ->withCount('variants');
 
         // Search by name

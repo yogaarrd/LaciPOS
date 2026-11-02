@@ -51,7 +51,25 @@ class StoreProfile extends Model
      */
     public static function getProfile(): ?self
     {
-        return static::first();
+        if (app()->runningInConsole()) {
+            return static::first();
+        }
+        $attributes = request()->attributes;
+        if (!$attributes->has('laci.store_profile')) {
+            $attributes->set('laci.store_profile', static::first());
+        }
+        return $attributes->get('laci.store_profile');
+    }
+
+    protected static function booted(): void
+    {
+        $forget = static function () {
+            if (app()->bound('request')) {
+                request()->attributes->remove('laci.store_profile');
+            }
+        };
+        static::saved($forget);
+        static::deleted($forget);
     }
 
     /**
@@ -60,7 +78,7 @@ class StoreProfile extends Model
      */
     public static function isOnboardingCompleted(): bool
     {
-        $profile = static::first();
+        $profile = static::getProfile();
         return $profile !== null && !empty($profile->store_name);
     }
 

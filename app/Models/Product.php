@@ -88,13 +88,7 @@ class Product extends Model
 
     public function getIsDiscountActiveAttribute(): bool
     {
-        if (!$this->discount_id || !$this->relationLoaded('discount') && !Discount::find($this->discount_id)) {
-            // Kita asumsikan relasi sudah di load atau kita panggil manual jika perlu
-            // Tapi untuk performa, kita gunakan relasi langsung
-            return $this->discount ? $this->discount->is_discount_active : false;
-        }
-
-        return $this->discount ? $this->discount->is_discount_active : false;
+        return $this->discount_id ? ($this->discount?->is_discount_active ?? false) : false;
     }
 
     public function getCalculatedDiscountAmountAttribute(): float

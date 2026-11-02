@@ -33,6 +33,8 @@ const isOverStock = computed(() => {
                 v-if="product.photo_url"
                 :src="product.photo_url"
                 :alt="product.name"
+                loading="lazy"
+                decoding="async"
                 class="product-card__img"
             />
             <div v-else class="product-card__placeholder">
