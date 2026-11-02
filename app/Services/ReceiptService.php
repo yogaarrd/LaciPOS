@@ -3,24 +3,15 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\StoreProfile;
-use Illuminate\Support\Facades\Storage;
 
 class ReceiptService
 {
-    public function generateReceiptData(Order $order): array
+    public function generateReceiptData(Order $order, bool $withoutLogo = false): array
     {
         $store = StoreProfile::getProfile();
         $order->loadMissing(['items', 'user']);
 
-        $logoUrl = null;
-        if ($store?->logo_path) {
-            $fullPath = Storage::disk('public')->path($store->logo_path);
-            if (file_exists($fullPath)) {
-                $mime = mime_content_type($fullPath);
-                $base64 = base64_encode(file_get_contents($fullPath));
-                $logoUrl = "data:{$mime};base64,{$base64}";
-            }
-        }
+        $logoUrl = $withoutLogo ? null : app(ReceiptLogo::class)->dataUrl($store?->logo_path);
 
         return [
             'store' => [
@@ -65,9 +56,9 @@ class ReceiptService
         ];
     }
 
-    public function renderReceiptHtml(Order $order, string $paperSize = '80mm'): string
+    public function renderReceiptHtml(Order $order, string $paperSize = '80mm', bool $withoutLogo = false): string
     {
-        $data = $this->generateReceiptData($order);
+        $data = $this->generateReceiptData($order, $withoutLogo);
         return view('receipts.thermal', array_merge($data, ['paperSize' => $paperSize]))->render();
     }
 }

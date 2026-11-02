@@ -12,9 +12,9 @@ class PrintController extends Controller
 {
     public function print(Order $order, PrintService $printService)
     {
-        $printService->printReceipt($order);
+        $result = $printService->printReceipt($order);
 
-        return redirect()->back()->with('print_success', 'Perintah cetak struk telah dikirim ke printer.');
+        return redirect()->back()->with($result['success'] ? 'print_success' : 'warning', $result['message']);
     }
 
     public function download(Order $order, ReceiptService $receiptService)

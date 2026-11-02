@@ -26,12 +26,13 @@ const formatDate = (dateString) => {
     return `${datePart}\n${timePart}`;
 };
 
+const isPrinting = ref(false);
 const printReceipt = () => {
+    if (isPrinting.value) return;
+    isPrinting.value = true;
     router.post(`/orders/${props.order.id}/print`, {}, {
         preserveScroll: true,
-        onSuccess: () => {
-            // Optional: Show success toast if needed
-        }
+        onFinish: () => { isPrinting.value = false; }
     });
 };
 
@@ -234,6 +235,7 @@ const getStatusColor = (statusText) => {
                         </a>
                         <button
                             @click="printReceipt"
+                            :disabled="isPrinting"
                             class="w-full flex items-center justify-center gap-2 rounded-lg bg-white border border-[#001e2b] px-4 py-2.5 text-sm font-semibold text-[#001e2b] hover:bg-[#f4f7f6] transition-colors"
                         >
                             <Printer class="h-4 w-4" />

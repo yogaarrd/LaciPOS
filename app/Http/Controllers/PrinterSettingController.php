@@ -14,16 +14,25 @@ class PrinterSettingController extends Controller
         $profile = StoreProfile::getProfile();
         
         $printers = [];
-        if (class_exists(\Native\Laravel\Facades\System::class)) {
+        $printerStatus = 'desktop_required';
+        if (config('nativephp-internal.running')) {
             try {
-                $nativePrinters = \Native\Laravel\Facades\System::printers();
+                $response = app(\App\Services\PrinterClient::class)->get('system/printers');
+                $nativePrinters = $response->json('printers');
+                if (!$response->successful() || !is_array($nativePrinters)) {
+                    throw new \RuntimeException('Printer list unavailable');
+                }
                 foreach ($nativePrinters as $printer) {
+                    if (!is_string($printer['name'] ?? null)) { continue; }
                     $printers[] = [
-                        'name' => $printer->name,
-                        'displayName' => $printer->displayName ?? $printer->name,
+                        'name' => $printer['name'],
+                        'displayName' => $printer['displayName'] ?? $printer['name'],
+                        'isDefault' => (bool) ($printer['isDefault'] ?? false),
                     ];
                 }
+                $printerStatus = count($printers) ? 'available' : 'empty';
             } catch (\Throwable $e) {
+                $printerStatus = 'unavailable';
                 Log::warning('Could not fetch printers from NativePHP: ' . $e->getMessage());
             }
         }
@@ -31,6 +40,7 @@ class PrinterSettingController extends Controller
         return Inertia::render('Settings/Printer', [
             'profile' => $profile,
             'printers' => $printers,
+            'printerStatus' => $printerStatus,
         ]);
     }
 
@@ -52,7 +62,7 @@ class PrinterSettingController extends Controller
         return redirect()->back()->with('success', 'Pengaturan printer berhasil disimpan.');
     }
 
-    public function testPrint(\App\Services\PrintService $printService)
+    public function testPrint(Request $request, \App\Services\PrintService $printService)
     {
         $dummyUser = new \App\Models\User(['name' => 'Kasir Test']);
         $dummyUser->id = 'test-user-id';
@@ -93,10 +103,11 @@ class PrinterSettingController extends Controller
         $dummyOrder->setRelation('user', $dummyUser);
         $dummyOrder->setRelation('items', $items);
 
-        $result = $printService->printReceipt($dummyOrder);
+        $request->validate(['without_logo' => 'sometimes|boolean']);
+        $result = $printService->printReceipt($dummyOrder, $request->boolean('without_logo'));
 
         if ($result['success']) {
-            return redirect()->back()->with('success', 'Test print berhasil dikirim ke printer.');
+            return redirect()->back()->with('success', $result['message']);
         } else {
             return redirect()->back()->with('warning', $result['message']);
         }

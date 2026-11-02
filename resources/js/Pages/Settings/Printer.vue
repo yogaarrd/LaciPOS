@@ -1,6 +1,6 @@
 <script setup>
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import SettingsLayout from '@/Layouts/SettingsLayout.vue';
 import { Button } from '@/Components/ui/button';
 import { Label } from '@/Components/ui/label';
@@ -19,6 +19,7 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    printerStatus: { type: String, default: 'unavailable' },
     printers: {
         type: Array,
         default: () => [],
@@ -42,13 +43,37 @@ const submit = () => {
 
 const isTesting = ref(false);
 
+const withoutLogo = ref(false);
+const isRefreshing = ref(false);
+const statusMessage = computed(() => ({
+    desktop_required: 'Cetak langsung tersedia di aplikasi desktop LaciPOS.',
+    unavailable: 'Daftar printer belum dapat diperiksa. Printer tersimpan tetap dapat dicoba.',
+    empty: 'Belum ada printer terdaftar. Pasang driver dan tambahkan printer melalui pengaturan komputer.',
+    available: 'Daftar printer berhasil diperiksa. Lakukan tes cetak untuk memeriksa hasilnya.',
+}[props.printerStatus]));
+const selectedMissing = computed(() => props.printerStatus === 'available'
+    && form.printer_name && !props.printers.some(p => p.name === form.printer_name));
+const refreshPrinters = () => {
+    isRefreshing.value = true;
+    router.reload({ only: ['printers', 'printerStatus'], onFinish: () => { isRefreshing.value = false; } });
+};
 const testPrint = () => {
     isTesting.value = true;
-    router.post('/settings/printer/test', {}, {
+    // Save first so the test uses exactly the visible selection.
+    let saved = false;
+    form.post('/settings/printer', {
         preserveScroll: true,
+        onSuccess: () => { saved = true; },
         onFinish: () => {
-            isTesting.value = false;
-        }
+            if (!saved) {
+                isTesting.value = false;
+                return;
+            }
+            router.post('/settings/printer/test', { without_logo: withoutLogo.value }, {
+                preserveScroll: true,
+                onFinish: () => { isTesting.value = false; },
+            });
+        },
     });
 };
 </script>
@@ -59,10 +84,19 @@ const testPrint = () => {
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div class="p-6 border-b border-gray-100">
                     <h2 class="text-lg font-semibold text-gray-900">Pengaturan Printer</h2>
-                    <p class="text-sm text-gray-500 mt-1">Konfigurasi printer thermal untuk mencetak struk transaksi.</p>
+                    <p class="text-sm text-gray-500 mt-1">Atur printer thermal 58 mm untuk mencetak struk transaksi.</p>
                 </div>
 
                 <div class="p-6 space-y-6">
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2 text-sm" role="status" aria-live="polite">
+                    <p>{{ statusMessage }}</p>
+                    <p v-if="selectedMissing" class="text-amber-700">Nama printer pilihan tidak ditemukan dalam daftar saat ini. Periksa namanya di komputer atau coba tes cetak jika sebelumnya bekerja.</p>
+                    <p v-if="!form.printer_name">Printer default komputer akan digunakan. Pastikan printer default adalah printer struk Anda.</p>
+                    <p class="text-gray-500">Printer terdaftar belum tentu sedang tersambung atau memiliki kertas. Fitur cetak tidak memerlukan pembelian tambahan.</p>
+                    <button type="button" @click="refreshPrinters" :disabled="isRefreshing || isTesting" class="underline font-medium">
+                        {{ isRefreshing ? 'Memeriksa...' : 'Periksa ulang daftar printer' }}
+                    </button>
+                </div>
                 <div class="space-y-2">
                     <label for="printer_name" class="block text-sm font-medium text-gray-700 mb-1">Pilih Printer</label>
                     <div class="flex gap-2 items-center">
@@ -72,7 +106,7 @@ const testPrint = () => {
                             </SelectTrigger>
                             <SelectContent class="bg-white">
                                 <SelectItem v-for="printer in printers" :key="printer.name" :value="printer.name">
-                                    {{ printer.displayName }}
+                                    {{ printer.displayName }}{{ printer.isDefault ? ' (Default komputer)' : '' }}
                                 </SelectItem>
                             </SelectContent>
                         </Select>
@@ -85,7 +119,7 @@ const testPrint = () => {
                     </div>
                     <p class="text-sm text-slate-500 mt-1">
                         <span v-if="printers.length > 0">Atau ketik manual jika tidak ada dalam daftar.</span>
-                        <span v-else>NativePHP belum mendeteksi daftar printer, silakan ketik nama printer sesuai di OS.</span>
+                        <span v-else>Jika sebelumnya berhasil, nama printer tersimpan tetap dapat digunakan. Gunakan nama persis seperti di pengaturan printer komputer.</span>
                     </p>
                     <input v-if="printers.length > 0"
                         id="printer_name_manual"
@@ -168,14 +202,16 @@ const testPrint = () => {
                 </div>
             </div>
 
+            <p class="text-sm text-gray-500">Simpan &amp; Tes akan menyimpan pilihan di atas. Pastikan printer menyala, kertas tersedia, dan tes cetak dari pengaturan komputer berhasil.</p>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="withoutLogo" :disabled="isTesting" /> Tes tanpa logo (untuk memeriksa masalah gambar)</label>
             <div class="flex justify-between items-center">
-                <button type="button" @click="testPrint" :disabled="isTesting" class="px-6 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm flex items-center disabled:opacity-50">
-                    {{ isTesting ? 'Mencetak...' : 'Test Print' }}
+                <button type="button" @click="testPrint" :disabled="isTesting || form.processing || props.printerStatus === 'desktop_required'" class="px-6 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm flex items-center disabled:opacity-50">
+                    {{ isTesting ? 'Mencetak...' : 'Simpan & Tes Cetak' }}
                 </button>
                 <button 
                     type="submit" 
                     class="px-6 py-2 bg-[#001e2b] text-white rounded-lg hover:bg-gray-800 transition-colors font-medium text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    :disabled="form.processing"
+                    :disabled="form.processing || isTesting"
                 >
                     <span v-if="form.processing" class="mr-2">Menyimpan...</span>
                     <span v-else>Simpan Perubahan</span>
